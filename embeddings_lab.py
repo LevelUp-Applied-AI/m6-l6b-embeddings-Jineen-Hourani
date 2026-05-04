@@ -16,7 +16,11 @@ def build_tfidf(texts):
 
     Returns (tfidf_matrix, vectorizer).
     """
-    pass
+    vectorizer = TfidfVectorizer()
+    
+    tfidf_matrix = vectorizer.fit_transform(texts)
+    
+    return tfidf_matrix, vectorizer
 
 
 def compute_tfidf_similarity(tfidf_matrix):
@@ -24,7 +28,9 @@ def compute_tfidf_similarity(tfidf_matrix):
 
     Returns a numpy array of shape (n, n).
     """
-    pass
+    similarity_matrix = sklearn_cosine(tfidf_matrix)
+    
+    return similarity_matrix
 
 
 def load_glove(filepath):
@@ -32,7 +38,11 @@ def load_glove(filepath):
 
     Returns a dict mapping each word to a numpy array.
     """
-    pass
+    vectorizer = TfidfVectorizer()
+    
+    tfidf_matrix = vectorizer.fit_transform(texts)
+    
+    return tfidf_matrix, vectorizer
 
 
 def text_to_glove(text, embeddings):
