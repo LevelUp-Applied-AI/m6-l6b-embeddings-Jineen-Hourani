@@ -68,11 +68,11 @@ def extract_bert_embedding(text, tokenizer, model):
 
     Returns a numpy array of shape (768,).
     """
+
     inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
     
     with torch.no_grad():
         outputs = model(**inputs)
-    
     
     last_hidden_state = outputs.last_hidden_state  # [batch_size, seq_len, 768]
 
@@ -86,15 +86,7 @@ def extract_bert_embedding(text, tokenizer, model):
 
 def compare_similarities(texts, queries, tfidf_sim, glove_embeddings,
                          bert_model, bert_tokenizer):
-    """Compare similarity rankings across TF-IDF, GloVe, and BERT.
-
-    For each query, find the top-3 most similar texts under each method,
-    excluding the query itself. Return:
-
-        {query_text: {"tfidf": [(text, score), ...],
-                      "glove": [(text, score), ...],
-                      "bert":  [(text, score), ...]}}
-    """
+    """Compare similarity rankings across TF-IDF, GloVe, and BERT."""
     results = {}
     
     all_glove = np.array([text_to_glove(t, glove_embeddings) for t in texts])
@@ -122,7 +114,6 @@ def compare_similarities(texts, queries, tfidf_sim, glove_embeddings,
         }
 
         for method, scores in methods_scores.items():
-        
             ranked_indices = np.argsort(scores)[::-1]
             top_indices = [i for i in ranked_indices if i != q_idx][:3]
             query_results[method] = [(texts[i], float(scores[i])) for i in top_indices]
@@ -132,56 +123,53 @@ def compare_similarities(texts, queries, tfidf_sim, glove_embeddings,
     return results
 
 
-
-
-from PIL import Image, ImageDraw, ImageFont
-
-def save_results_as_image(comparison, filename="comparison_results.png"):
-    
-    width = 1600
-    line_height = 35
-    padding = 50
-    total_lines = len(comparison) * 12 + 5
-    height = total_lines * line_height
-    
-    img = Image.new('RGB', (width, height), color=(255, 255, 255))
-    draw = ImageDraw.Draw(img)
-    
-    try:
-        font_title = ImageFont.truetype("arial.ttf", 24)
-        font_text = ImageFont.truetype("arial.ttf", 18)
-        font_bold = ImageFont.truetype("arialbd.ttf", 20)
-    except:
-        font_title = font_text = font_bold = ImageFont.load_default()
-
-    y = padding
-    
-    for query, methods in comparison.items():
-
-        draw.text((padding, y), f"Query: {query[:120]}...", fill=(0, 0, 0), font=font_bold)
-        y += line_height + 10
-        
-        x_offset = padding + 20
-        for method, results in methods.items():
-            draw.text((x_offset, y), f"[{method.upper()}]:", fill=(255, 0, 0) if method == 'bert' else (0, 0, 255), font=font_bold)
-            y += line_height
-            for i, (text, score) in enumerate(results, 1):
-                clean_text = text.replace('\n', ' ').strip()[:100]
-                draw.text((x_offset + 30, y), f"{i}. ({score:.3f}) {clean_text}...", fill=(50, 50, 50), font=font_text)
-                y += line_height
-        
-        y += 10
-        draw.line((padding, y, width-padding, y), fill=(200, 200, 200), width=2)
-        y += 30
-
-    img.save(filename)
-    print(f"\n[Done] Results saved as an image: {filename}")
-
-   
-
 if __name__ == "__main__":
     import torch
     from transformers import AutoTokenizer, AutoModel
+    
+
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        print("Pillow not installed. Skipping image generation.")
+
+    def save_results_as_image(comparison, filename="BBC_Embeddings_Comparison.png"):
+        width = 1600
+        line_height = 35
+        padding = 50
+        total_lines = len(comparison) * 15 + 10
+        height = total_lines * line_height
+        
+        img = Image.new('RGB', (width, height), color=(255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        
+        try:
+
+            font_text = ImageFont.truetype("arial.ttf", 18)
+            font_bold = ImageFont.truetype("arialbd.ttf", 20)
+        except:
+            font_text = font_bold = ImageFont.load_default()
+
+        y = padding
+        for query, methods in comparison.items():
+            draw.text((padding, y), f"Query: {query[:120]}...", fill=(0, 0, 0), font=font_bold)
+            y += line_height + 10
+            
+            x_offset = padding + 20
+            for method, results in methods.items():
+                draw.text((x_offset, y), f"[{method.upper()}]:", fill=(255, 0, 0) if method == 'bert' else (0, 0, 255), font=font_bold)
+                y += line_height
+                for i, (text, score) in enumerate(results, 1):
+                    clean_text = text.replace('\n', ' ').strip()[:100]
+                    draw.text((x_offset + 30, y), f"{i}. ({score:.3f}) {clean_text}...", fill=(50, 50, 50), font=font_text)
+                    y += line_height
+            
+            y += 10
+            draw.line((padding, y, width-padding, y), fill=(200, 200, 200), width=2)
+            y += 30
+
+        img.save(filename)
+        print(f"\n[Done] Results saved as an image: {filename}")
 
     # Load data
     df = pd.read_csv("data/bbc_news.csv")
@@ -213,9 +201,7 @@ if __name__ == "__main__":
     if sample_bert is not None:
         print(f"Sample BERT embedding shape: {sample_bert.shape}")
 
-    # Task 4: Compare — pick one query per category so the cross-method
-    # ranking comparison is not degenerate (the CSV is sorted by category,
-    # so texts[:5] would all be from the same one).
+    # Task 4: Compare
     if result and glove and tfidf_sim is not None:
         queries = [df[df["category"] == cat]["text"].iloc[0]
                    for cat in df["category"].unique()]
@@ -229,7 +215,5 @@ if __name__ == "__main__":
                     top = comparison[q].get(method, [])
                     print(f"  {method}: {[t[:40] for t, _ in top[:3]]}")
      
-        
             print("\nGenerating comparison image for all 5 categories...")
-            
             save_results_as_image(comparison, "BBC_Embeddings_Comparison.png")
