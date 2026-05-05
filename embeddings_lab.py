@@ -38,11 +38,14 @@ def load_glove(filepath):
 
     Returns a dict mapping each word to a numpy array.
     """
-    vectorizer = TfidfVectorizer()
-    
-    tfidf_matrix = vectorizer.fit_transform(texts)
-    
-    return tfidf_matrix, vectorizer
+    embeddings = {}
+    with open(filepath, 'r', encoding='utf-8') as f:
+        for line in f:
+            values = line.split()
+            word = values[0]
+            vector = np.asarray(values[1:], dtype='float32')
+            embeddings[word] = vector
+    return embeddings
 
 
 def text_to_glove(text, embeddings):
@@ -51,7 +54,13 @@ def text_to_glove(text, embeddings):
     Skip out-of-vocabulary words. If every word is OOV, return a zero
     vector of shape (50,).
     """
-    pass
+    words = text.lower().split()
+    valid_vectors = [embeddings[w] for w in words if w in embeddings]
+    
+    if not valid_vectors:
+        return np.zeros(50,) 
+    
+    return np.mean(valid_vectors, axis=0)
 
 
 def extract_bert_embedding(text, tokenizer, model):
@@ -59,7 +68,20 @@ def extract_bert_embedding(text, tokenizer, model):
 
     Returns a numpy array of shape (768,).
     """
-    pass
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+    
+    with torch.no_grad():
+        outputs = model(**inputs)
+    
+    
+    last_hidden_state = outputs.last_hidden_state  # [batch_size, seq_len, 768]
+
+    mask = inputs['attention_mask'].unsqueeze(-1).expand(last_hidden_state.size()).float()
+    sum_embeddings = torch.sum(last_hidden_state * mask, 1)
+    sum_mask = torch.clamp(mask.sum(1), min=1e-9)
+    mean_pooled = sum_embeddings / sum_mask
+    
+    return mean_pooled.squeeze().numpy()
 
 
 def compare_similarities(texts, queries, tfidf_sim, glove_embeddings,
@@ -73,7 +95,41 @@ def compare_similarities(texts, queries, tfidf_sim, glove_embeddings,
                       "glove": [(text, score), ...],
                       "bert":  [(text, score), ...]}}
     """
-    pass
+    results = {}
+    
+    all_glove = np.array([text_to_glove(t, glove_embeddings) for t in texts])
+    all_bert = np.array([extract_bert_embedding(t, bert_tokenizer, bert_model) for t in texts])
+    
+    for query_text in queries:
+        q_idx = texts.index(query_text)
+        query_results = {}
+
+        # 1. TF-IDF
+        scores_tfidf = tfidf_sim[q_idx]
+        
+        # 2. GloVe
+        q_glove = all_glove[q_idx].reshape(1, -1)
+        scores_glove = sklearn_cosine(q_glove, all_glove)[0]
+        
+        # 3. BERT
+        q_bert = all_bert[q_idx].reshape(1, -1)
+        scores_bert = sklearn_cosine(q_bert, all_bert)[0]
+
+        methods_scores = {
+            "tfidf": scores_tfidf,
+            "glove": scores_glove,
+            "bert": scores_bert
+        }
+
+        for method, scores in methods_scores.items():
+        
+            ranked_indices = np.argsort(scores)[::-1]
+            top_indices = [i for i in ranked_indices if i != q_idx][:3]
+            query_results[method] = [(texts[i], float(scores[i])) for i in top_indices]
+        
+        results[query_text] = query_results
+        
+    return results
 
 
 if __name__ == "__main__":
